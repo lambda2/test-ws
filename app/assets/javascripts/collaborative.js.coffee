@@ -8,5 +8,6 @@ window.Core ||=
 class Core.Collaborative
 
   constructor: ->
-    console.info("Halo world")
-    console.log(Core.Handler)
+    # if $(".edit_posts").length
+    #   @ws = new Core.Handler()
+    @ws = new Core.Handler()
