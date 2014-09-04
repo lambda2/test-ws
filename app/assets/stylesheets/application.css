@@ -13,3 +13,11 @@
  *= require_tree .
  *= require_self
  */
+
+
+/* CSS de la folie! */
+
+textarea {
+    width: 600px;
+    height: 400px;
+}
