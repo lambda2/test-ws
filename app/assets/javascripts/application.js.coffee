@@ -14,10 +14,12 @@
 #= require jquery_ujs
 #= require turbolinks
 #= require underscore
+#= require vendor/underscore.string
 #= require_tree .
 #= require websocket_rails/main
 
 # Et c'est parti !
+_.str.include('Underscore.string', 'string')
 
 $ ->
   new Core.Collaborative()
