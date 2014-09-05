@@ -15,7 +15,6 @@
 #= require turbolinks
 #= require underscore
 #= require vendor/underscore.string
-#= require vendor/mousetrap.min
 #= require_tree .
 #= require websocket_rails/main
 

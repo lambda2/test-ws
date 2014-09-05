@@ -16,18 +16,8 @@ class Core.Handler
     @channel = @dispatcher.subscribe(@channelName)
     @last = $(@selector).val()
 
-    @channel.bind("all", (data) =>
-      console.warn("Hello ! <=>", data)
-      $(@selector).val(data.content)
-      @updateCache()
-    )
-
-
-    @channel.bind("action", (data) =>
-      console.warn("Hello ! <=>", data)
-      $(@selector).val(data.content)
-      @updateCache()
-    )
+    @channel.bind("all", @_receiveHandshake)
+    @channel.bind("feedback", @_updatedContent)
 
     @channel.bind(@eventName, (data) =>
       console.warn("Data received ! => ", data)
@@ -62,16 +52,19 @@ class Core.Handler
     onBounds = (c, l) ->
       (c < _current.length || l < _last.length)
     while _current[c] == _last[l] and onBounds(c, l)
+      console.log("=#{_current[c]}")
       c++
       l++
     if _type is "i"
       while _current[c] != _last[l] and onBounds(c, l)
-        _diff += _current[c]
+        console.log("+#{_current[c]}")
+        _diff += _current[c] unless c >= _current.length
         c++
       {p: l, c: _diff, t: _type}
     else if _type is "d"
       while _current[c] != _last[l] and onBounds(c, l)
-        _diff += _last[l]
+        console.log("-#{_last[l]}")
+        _diff += _last[l] unless l >= _last.length
         l++
       {p: c, c: _diff, t: _type}
 
@@ -97,6 +90,27 @@ class Core.Handler
 
   sayHello: ->
     @dispatcher.trigger("#{@channelName}.hello", {})
+
+  _receiveHandshake: (data) =>
+    console.warn("Hello ! <=>", data)
+    $(@selector).val(data.content)
+    @version = data.version
+    @updateCache()
+
+  _updatedContent: (data) =>
+    console.log("update => ", data, @)
+    if data.v > @version
+      console.log(data, @)
+      current = $(@selector).val()
+      if data.t is "i"
+        console.log("insert")
+        current = _.str.insert(current, data.p, data.c)
+      else if data.t is "d"
+        current = _.str.splice(current, data.p, data.c.length)
+        console.log("delete")
+      $(@selector).val(current)
+      @version = data.v
+    @updateCache()
 
 
   # attachChannelBind: (channelName, event, callback) =>
