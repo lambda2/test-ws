@@ -2,6 +2,7 @@ window.Core ||=
   Collaborative: {}
   Handler: {}
 
+#= require diff
 #= require handler
 #= require self
 

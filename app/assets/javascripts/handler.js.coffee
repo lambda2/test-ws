@@ -6,11 +6,10 @@ window.websocket_host = "10.18.188.119:2000"
 
 class Core.Handler
   dispatcher: new WebSocketRails(window.websocket_host + '/websocket')
-  version: 1
 
   constructor: (@channelName, @eventName, @selector) ->
-    console.log("Handler is on the road ! [#{@channelName}.#{@eventName}]")
-
+    @uid = undefined
+    @version = 1
     @updateCache()
     # Version Channel
     @channel = @dispatcher.subscribe(@channelName)
@@ -18,55 +17,35 @@ class Core.Handler
 
     @channel.bind("all", @_receiveHandshake)
     @channel.bind("feedback", @_updatedContent)
-
-    @channel.bind(@eventName, (data) =>
-      console.warn("Data received ! => ", data)
-      current = $(@selector).val()
-      if data.t is "i"
-        console.log("insert")
-        current = _.str.insert(current, data.p, data.c)
-      else if data.t is "d"
-        current = _.str.splice(current, data.p, data.c.length)
-        console.log("delete")
-      $(@selector).val(current)
-      @updateCache()
-    )
-
-    $(@selector).on('keyup', (event, a, b) =>
-      current = @getContent()
-      @sendRawData(_.extend(@diff(), {v: @nextVersion()}))
-      @updateCache()
-    )
+    $(@selector).on('keyup', @_keyUpEvent)
+    $(@selector).on('click', @_clickEvent)
 
     @dispatcher.on_open = (data) =>
-      console.log('Connection has been established: ', data)
       @sayHello()
 
-  diff: ->
-    c = 0
-    l = 0
-    _diff = ""
-    _current = @getContent()
-    _last = @last
-    _type = (if _current.length > _last.length then "i" else "d")
-    onBounds = (c, l) ->
-      (c < _current.length || l < _last.length)
-    while _current[c] == _last[l] and onBounds(c, l)
-      console.log("=#{_current[c]}")
-      c++
-      l++
-    if _type is "i"
-      while _current[c] != _last[l] and onBounds(c, l)
-        console.log("+#{_current[c]}")
-        _diff += _current[c] unless c >= _current.length
-        c++
-      {p: l, c: _diff, t: _type}
-    else if _type is "d"
-      while _current[c] != _last[l] and onBounds(c, l)
-        console.log("-#{_last[l]}")
-        _diff += _last[l] unless l >= _last.length
-        l++
-      {p: c, c: _diff, t: _type}
+  diff: (current, cache)->
+    _.filter(Core._diff(current, cache), (e) ->
+      e.p?
+    )
+    # c = 0
+    # l = 0
+    # _diff = ""
+    # _type = (if _current.length > _last.length then "i" else "d")
+    # onBounds = (c, l) ->
+    #   (c < _current.length || l < _last.length)
+    # while _current[c] == _last[l] and onBounds(c, l)
+    #   c++
+    #   l++
+    # if _type is "i"
+    #   while _current[c] != _last[l] and onBounds(c, l)
+    #     _diff += _current[c] unless c >= _current.length
+    #     c++
+    #   {p: l, c: _diff, t: _type}
+    # else if _type is "d"
+    #   while _current[c] != _last[l] and onBounds(c, l)
+    #     _diff += _last[l] unless l >= _last.length
+    #     l++
+    #   {p: c, c: _diff, t: _type}
 
   getContent: ->
     $(@selector).val()
@@ -82,8 +61,18 @@ class Core.Handler
       v: @nextVersion()
     @sendRawData(pack)
 
-  sendRawData: (data) ->
+  sendRawData: (data, cursor) ->
+    data = _.extend(data, {uid: @uid, v: (if cursor? then @version else @nextVersion())})
     @dispatcher.trigger("#{@channelName}.#{@eventName}", data)
+    console.info("> Sending...", data)
+
+  sendCursorPosition: (start, end) =>
+    pack = {t: 'c'}
+    if start > 0
+      pack.s = start
+      if end != start
+        pack.e = end
+      @sendRawData(pack, true)
 
   nextVersion: ->
     @version = @version + 1
@@ -91,26 +80,45 @@ class Core.Handler
   sayHello: ->
     @dispatcher.trigger("#{@channelName}.hello", {})
 
+  _clickEvent: =>
+    start = $(@selector)[0].selectionStart
+    end = $(@selector)[0].selectionEnd
+    @sendCursorPosition(start, end)
+
+  _keyUpEvent: (e) =>
+    cache = @last
+    current = @getContent()
+    @updateCache()
+    d = @diff(current, cache)
+    _.each(d, (e) =>
+      @sendRawData(e)
+    )
+
   _receiveHandshake: (data) =>
-    console.warn("Hello ! <=>", data)
+    console.warn("Reset ! > ", data)
     $(@selector).val(data.content)
     @version = data.version
+    @uid ?= data.uid
     @updateCache()
 
   _updatedContent: (data) =>
-    console.log("update => ", data, @)
+    console.info("[recv] > ", data)
+    start = $(@selector)[0].selectionStart
     if data.v > @version
-      console.log(data, @)
       current = $(@selector).val()
       if data.t is "i"
-        console.log("insert")
         current = _.str.insert(current, data.p, data.c)
+        if data.p < start
+          start += data.c.length
       else if data.t is "d"
         current = _.str.splice(current, data.p, data.c.length)
-        console.log("delete")
+        if data.p < start
+          start -= data.c.length
+      $(@selector).focus()
       $(@selector).val(current)
+      $(@selector)[0].setSelectionRange(start, start)
       @version = data.v
-    @updateCache()
+      @updateCache()
 
 
   # attachChannelBind: (channelName, event, callback) =>
@@ -118,7 +126,6 @@ class Core.Handler
   #
   #   # bind to a channel event
   #   channel.bind(event, (data) ->
-  #     console.log("Event => ", data)
   #     callback(data)
   #   )
   #   @
@@ -128,7 +135,6 @@ class Core.Handler
   #
   #   # bind to a channel chan_event
   #   channel.bind(chan_event, (data) ->
-  #     console.log("Event => ", data)
   #     callback(data)
   #   )
   #   @
