@@ -13,6 +13,7 @@
 #= require jquery
 #= require jquery_ujs
 #= require turbolinks
+#= require vendor/md5
 #= require underscore
 #= require vendor/underscore.string
 #= require_tree .

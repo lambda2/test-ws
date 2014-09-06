@@ -93,32 +93,68 @@ class Core.Handler
     _.each(d, (e) =>
       @sendRawData(e)
     )
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    return false;
 
   _receiveHandshake: (data) =>
     console.warn("Reset ! > ", data)
+    @_saveCursorPosition()
     $(@selector).val(data.content)
+    @_restoreCursorPosition()
     @version = data.version
     @uid ?= data.uid
     @updateCache()
 
+  _checkIntegrity: (data) ->
+    checksum_ext = data.md5
+    checksum = md5(@getContent())
+    if checksum != checksum_ext
+      console.warn("VERSION DIFFER ! (#{checksum} != #{checksum_ext})")
+      @sayHello()
+      return false
+    else
+      console.log("[md5] Ok !")
+      return true
+
+  _saveCursorPosition: ->
+    @_cursor_s = $(@selector)[0].selectionStart
+    @_cursor_e = $(@selector)[0].selectionEnd
+    console.log("SAVE #{@_cursor_s} - #{@_cursor_e}")
+
+  _restoreCursorPosition: (diff) ->
+    console.log("RESTORE #{@_cursor_s} - #{@_cursor_e}")
+    if diff != undefined
+      console.log("diff")
+      if diff.t is "i" and diff.p < @_cursor_s
+        console.log("[before] position was in #{@_cursor_s} (#{diff.p})")
+        $(@selector)[0].setSelectionRange(@_cursor_s + diff.c.length, @_cursor_e + diff.c.length)
+        console.log("[after] position is now in #{@_cursor_s + diff.c.length} (#{@_cursor_s} + #{diff.c.length})")
+      else if diff.t is "d" and diff.p > @_cursor_s
+        $(@selector)[0].setSelectionRange(@_cursor_s - diff.c.length, @_cursor_e - diff.c.length)
+      else
+        $(@selector)[0].setSelectionRange(@_cursor_s, @_cursor_e)
+        console.warn("AH BAH EN FAIT ON EST LA :'(")
+    else
+      console.log("no diff")
+      console.log("[simpe, restore] position was in #{@_cursor_s}")
+      $(@selector)[0].setSelectionRange(@_cursor_s, @_cursor_e)
+
   _updatedContent: (data) =>
     console.info("[recv] > ", data)
-    start = $(@selector)[0].selectionStart
-    if data.v > @version
+    if data.uid != @uid
+      console.info("[Foreign package !] (from #{data.uid})")
       current = $(@selector).val()
       if data.t is "i"
         current = _.str.insert(current, data.p, data.c)
-        if data.p < start
-          start += data.c.length
       else if data.t is "d"
         current = _.str.splice(current, data.p, data.c.length)
-        if data.p < start
-          start -= data.c.length
-      $(@selector).focus()
+      @_saveCursorPosition()
       $(@selector).val(current)
-      $(@selector)[0].setSelectionRange(start, start)
+      @_restoreCursorPosition(data)
       @version = data.v
       @updateCache()
+      @_checkIntegrity(data)
 
 
   # attachChannelBind: (channelName, event, callback) =>
